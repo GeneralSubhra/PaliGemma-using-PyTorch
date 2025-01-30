@@ -65,7 +65,8 @@ class SiglipVisionEmbeddings(nn.Module):
         #inject positional information into the patch embeddings
         embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
-class SiglipAttention(nn.module):
+    
+class SiglipAttention(nn.Module):
     def __init__(self,config):
         super().__init__() 
         self.config = config
@@ -74,6 +75,7 @@ class SiglipAttention(nn.module):
         self.head_dim=self.embed_dim // self.num_heads
         self.scale=self.head_dim**-0.5 #1/sqrt(self.head_dim)
         self.dropout=config.attention_dropout
+        # Linear projections for query, key, and value transformations
         self.k_proj=nn.Linear(self.embed_dim,self.embed_dim)
         self.v_proj=nn.Linear(self.embed_dim,self.embed_dim)
         self.q_proj=nn.Linear(self.embed_dim,self.embed_dim)
@@ -85,8 +87,29 @@ class SiglipAttention(nn.module):
         query_states=self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
+        query_states=query_states.view(batch_size,seq_len,self.num_heads,self.head_dim).transpose(1,2)
+        key_states=key_states.view(batch_size,seq_len,self.num_heads,self.head_dim).transpose(1,2)
+        value_states=value_states.view(batch_size,seq_len,self.num_heads,self.head_dim).transpose(1,2)
+        attn_weight=(torch.matmul(query_states,key_states.transpose(2,3))*self.scale)
         
+        if attn_weight.size()!=(batch_size,self.num_heads,seq_len,seq_len):
+            raise ValueError(
+                f"Attention weights should be of size{(batch_size,self.num_heads,seq_len,seq_len)},but is"
+                f"{attn_weight.size()}"
+            )
+        attn_weight = nn.functional.softmax(attn_weight,dim=-1,dtype=torch.float32).to(query_states.dtype)#dim=-1 means its applying on row,for col is will be 0
+        attn_weight=nn.functional.dropout(attn_weight,p=self.dropout,training=self.training) #for training only
+        attn_output = torch.matmul(attn_weight,value_states)
         
+        if attn_output.size()!=(batch_size,self.num_heads,seq_len,self.head_dim):
+            raise ValueError(
+                f"Attention weights should be of size{(batch_size,self.num_heads,seq_len,self.head_dim)},but is"
+                f"{attn_output.size()}"
+            )
+        attn_output  = attn_output.transpose(1,2).contiguous().reshape(batch_size, seq_len, self.embed_dim)
+        attn_output=self.out_proj(attn_output)
+        return attn_output,attn_weight
+                      
 class SiglipMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

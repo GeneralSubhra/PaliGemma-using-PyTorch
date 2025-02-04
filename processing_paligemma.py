@@ -7,6 +7,9 @@ IMAGENET_STD_MEAN = [0.5,0.5,0.5]
 IMAGENET_STD_STD = [0.5,0.5,0.5]
 
 class PaliGemmaProcessor:
+    
+    IMAGE_TOKEN = "<image>"
+    
     def __init__(self,tokenizer,num_img_tokens:int,img_size:int):
         super().__init__()
         self.img_seq_len = num_img_tokens
@@ -15,5 +18,52 @@ class PaliGemmaProcessor:
         tokenizer.add_special_tokens(tokens_to_add)
         EXTRA_TOKENS = [
             f"<loc{i:04d}>" for i in range(1024)
-            ] #token used for object detection bounding box
+        ] #token used for object detection bounding box
+        EXTRA_TOKENS+=[
+            f"<seg{i:03d}>" for i in range(128)
+        ] #token used for object segmentation
+        tokenizer.add_tokens(EXTRA_TOKENS)
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.IMAGE_TOKENS)
+        tokenizer.add_bos_token = False
+        tokenizer.add_eos_token = False
+        self.tokenizer = tokenizer
         
+    def __call__(
+        self,
+        text:List[str],
+        images: List[Image.Image],
+        padding:str="longest",
+        truncation:bool=True,
+    ) -> dict:
+        assert len(images)==1 and len(text)==1,f"Recived {len(images)} images for {len(text)}prompts."
+        
+        pix_val = process_images(
+            images,
+            size=(self.image_size,self.image_size),
+            resample=Image.Resampling.BICUBIC,
+            rescale_factor=1/255.0,
+            image_mean=IMAGENET_STD_MEAN,
+            image_std=IMAGENET_STD_STD,
+        )       
+        pix_val=np.stack(pix_val,axis=0)
+        pix_val=torch.tensor(pix_val)
+        
+        input_string=[
+            add_image_tokens_to_prompt(
+                prefix_prompt=prompt,
+                bos_token=self.tokenizer.bos_token,
+                img_seq_len=self.image_seq_length,
+                img_token=self.IMAGE_TOKEN,
+            )
+            for prompt in text
+        ]
+        
+        #retruns the input id anda attn mask as tensors
+        inputs = self.tokenizer(
+            input_string,
+            return_tensors="pt",
+            padding=padding,
+            truncation=truncation,
+        )
+        return_data = {"pixel_values": pix_val,**inputs}
+        return return_data

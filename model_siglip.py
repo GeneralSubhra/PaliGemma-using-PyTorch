@@ -122,7 +122,15 @@ class SiglipMLP(nn.Module):
         hidden_state=nn.functional.gelu(hidden_state,approximate="tanh")
         hidden_state=self.fc2(hidden_state)
         return hidden_state
-        
+
+class SiglipEncoder(nn.Module):
+    def __init__(self, config: SiglipVisionConfig):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList(
+            [SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
+         
 class SiglipEncoderLayer(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()

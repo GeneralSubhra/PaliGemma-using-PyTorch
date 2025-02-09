@@ -6,6 +6,26 @@ import torch
 IMAGENET_STD_MEAN = [0.5,0.5,0.5]
 IMAGENET_STD_STD = [0.5,0.5,0.5]
 
+
+def resize(
+    image : Image,
+    size: Tuple[int,int],
+    resample: Image.Resampling=None,
+    reducing_gap: Optional[int]=None,
+)->np.ndarray:
+    height,width=size
+    resized_image = image.resize(
+        (width,height),resample=resample,reducing_gap=reducing_gap
+    )
+    return resized_image
+
+def rescale(
+    image:np.ndarray,scale:float,dtype:np.dtype=np.float32    
+)->np.ndarray:
+    rescaled_image=image*scale
+    rescaled_image=rescaled_image.astype(dtype)
+    return rescaled_image
+    
 def process_images(
     images:List[Image.Image],
     size:Dict[str,str]=None,
@@ -66,7 +86,7 @@ class PaliGemmaProcessor:
         )       
         pix_val=np.stack(pix_val,axis=0)
         pix_val=torch.tensor(pix_val)
-        
+        #prepend a num of img token to input
         input_string=[
             add_image_tokens_to_prompt(
                 prefix_prompt=prompt,
@@ -77,7 +97,7 @@ class PaliGemmaProcessor:
             for prompt in text
         ]
         
-        #retruns the input id anda attn mask as tensors
+        #retruns the input id and attn mask as tensors
         inputs = self.tokenizer(
             input_string,
             return_tensors="pt",

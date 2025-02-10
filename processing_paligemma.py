@@ -19,6 +19,16 @@ def resize(
     )
     return resized_image
 
+def normalize(
+    image: np.ndarray,
+    mean:Union[float,Iterable[float]],
+    std:Union[float,Iterable[float]],
+)->np.ndarray:
+    mean=np.array(mean,dtype=image.dtype)
+    std=np.array(std,dtype=image.dtype)
+    image=(image-mean)/std
+    return image
+
 def rescale(
     image:np.ndarray,scale:float,dtype:np.dtype=np.float32    
 )->np.ndarray:
@@ -44,6 +54,8 @@ def process_images(
     images=[image.transpose(2,0,1)for image in images]
     return images
 
+def add_image_tokens_to_prompt(prefix_promp,bos_token,image_seq_len,image_token):
+    return f"{image_token*image_seq_len}{bos_token}{prefix_promp}\n"
 
 class PaliGemmaProcessor:
     

@@ -9,6 +9,7 @@ class PaliGemmaConfig():
     def __init__(
         self,
         vision_config = None,
+        text_config=None,
         ignore_index = -100,
         image_token_index=256000,
         vocab_size=257152,
@@ -26,7 +27,17 @@ class PaliGemmaConfig():
         self.vision_config=vision_config
         self.is_encode_decoder = False
         self.pad_token_id=pad_token_id
-    
+
+        self.vision_config = SiglipVisionConfig(**vision_config)
+        self.text_config = text_config
+
+        self.text_config = GemmaConfig(**text_config, pad_token_id=pad_token_id)
+        self.vocab_size = self.text_config.vocab_size
+
+        self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
+        self.vision_config.projection_dim = projection_dim
+
+
 
 class PaliGemmaForConditionalGeneration(nn.Module):
     def __init__(self,config:PaliGemmaConfig):
@@ -43,6 +54,22 @@ class PaliGemmaForConditionalGeneration(nn.Module):
     def tie_weights(self):
         return self.language_model.tie_weights()
     
+    def _merge_input_ids_with_image_features(
+        self,image_features:torch.Tensor,
+        input_embeds: torch.Tensor,
+        input_ids:torch.Tensor,
+        attention_mask:torch.Tensor,
+        kv_cache: Optional[KVCache]=None
+    ):
+        _,_,embed_dim = image_features.shape
+        dtype,device = input_embeds.dtype,input_embeds.device
+        scaled_image_features = image_features/(self.config.hidden_size**0.5)
+        final_embedding = torch.zeros(batch_size,
+                                      sequence_length,
+                                      embed_dim,
+                                      dtype=inputs_embeds.dtype,
+                                      device=inputs_embeds.device)
+        
     def forward(
         self,
         input_ids: torch.LongTensor = None,
